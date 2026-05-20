@@ -1,0 +1,109 @@
+﻿@page "/user-dashboard"
+@rendermode InteractiveServer
+@using LocalServicesPlatform.Models
+@using LocalServicesPlatform.Services
+@inject PlatformService DataService
+@inject UserSession Session
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="container mt-4">
+    @if (!Session.IsLoggedIn || Session.Role != "Customer")
+    {
+        <div class="alert alert-danger shadow-sm">
+            <h4>Access Denied</h4>
+            <p>You must be signed in as a Customer to access this portal.</p>
+            <a href="login" class="btn btn-primary btn-sm">Go to Login</a>
+        </div>
+    }
+    else
+    {
+        <div class="row mb-4 align-items-center">
+            <div class="col">
+                <h2 class="fw-bold text-dark mb-0">Customer Workspace Portal</h2>
+                <p class="text-muted">Welcome back, @Session.FullName. Track and manage your active orders.</p>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            @* --- Left Side: Booking Feed Overview --- *@
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0 rounded-4 p-4 mb-4">
+                    <h5 class="fw-bold text-secondary mb-3">Your Booked Appointments</h5>
+                    <hr class="my-2" />
+
+                    <div class="alert alert-light border text-center py-5 rounded-3 mt-2">
+                        <i class="bi bi-calendar2-x display-6 text-muted mb-2 d-block"></i>
+                        <span class="text-secondary fw-semibold">No active service dispatches or appointment schedules found.</span>
+                    </div>
+                </div>
+            </div>
+
+            @* --- Right Side: Customer Meta Profiles & Account Deletion --- *@
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 rounded-4 p-4 text-center bg-white mb-4">
+                    <div class="avatar-icon mb-2">
+                        <i class="bi bi-person-circle text-secondary display-4"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-0">@Session.FullName</h5>
+                    <span class="badge bg-light text-dark border mb-2 px-3 py-1 mt-1">Customer Account</span>
+                    <p class="text-muted small mb-0"><i class="bi bi-shield-check text-success"></i> Active Member</p>
+                </div>
+
+                @* --- Secure Profile Deletion Box --- *@
+                <div class="card shadow-sm border-0 rounded-4 p-4 bg-white border-top border-5 border-danger">
+                    <h5 class="fw-bold text-danger mb-2">
+                        <i class="bi bi-shield-exclamation me-2"></i>Danger Zone
+                    </h5>
+                    <p class="text-muted mb-3" style="font-size: 0.85rem;">
+                        Deleting your profile will permanently drop your historical booking records, clear your preferences, and erase your customer account from the system databases.
+                    </p>
+
+                    @if (!showConfirmDelete)
+                    {
+                        <button class="btn btn-outline-danger w-100 fw-bold py-2 btn-sm" @onclick="() => showConfirmDelete = true">
+                            <i class="bi bi-trash3-fill me-2"></i> Delete My Profile
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="bg-light p-3 rounded border border-danger text-center">
+                            <p class="text-danger small fw-bold mb-2">Are you completely, absolutely sure?</p>
+                            <div class="d-flex gap-2 justify-content-center">
+                                <button class="btn btn-danger btn-sm px-3 fw-bold" @onclick="ConfirmAccountDeletion">Yes, Purge</button>
+                                <button class="btn btn-secondary btn-sm px-3" @onclick="() => showConfirmDelete = false">Cancel</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool showConfirmDelete = false;
+
+    protected override void OnInitialized()
+    {
+        // Force component to re-render if state changes while viewing page
+        Session.OnSessionChanged += OnSessionChangedHandler;
+    }
+
+    private void OnSessionChangedHandler() => InvokeAsync(StateHasChanged);
+
+    private async Task ConfirmAccountDeletion()
+    {
+        var success = await DataService.DeleteCustomerAccountAsync(Session.UserId);
+        if (success)
+        {
+            Session.Logout();
+            Nav.NavigateTo("/", forceLoad: true);
+        }
+    }
+
+    public void Dispose()
+    {
+        Session.OnSessionChanged -= OnSessionChangedHandler;
+    }
+}

@@ -1,0 +1,178 @@
+﻿@page "/explore"
+@rendermode InteractiveServer
+@using LocalServicesPlatform.Models
+@using LocalServicesPlatform.Services
+@inject PlatformService DataService
+@inject UserSession Session
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="container mt-4">
+
+    @* --- BOOKING SUCCESS CONFIRMATION MESSAGE BANNER --- *@
+    @if (showSuccessBanner)
+    {
+        <div class="alert alert-success shadow border-start border-4 border-success d-flex align-items-center justify-content-between p-3 mb-4" role="alert">
+            <div>
+                <i class="bi bi-check-circle-fill me-2 h5 mb-0 text-success"></i>
+                <strong class="text-dark">Booking Confirmed!</strong>
+                <span class="text-muted ms-1">Your service dispatch request has been safely captured and sent to the provider's dashboard.</span>
+            </div>
+            <button type="button" class="btn-close" @onclick="() => showSuccessBanner = false"></button>
+        </div>
+    }
+
+    @* --- HEADER ROW WITH TOP-RIGHT PROFILE DELETION BUTTON --- *@
+    <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 shadow-sm rounded-3">
+        <div>
+            <h2 class="fw-bold text-dark mb-0">Available Services Marketplace</h2>
+            @if (Session.IsLoggedIn)
+            {
+                <p class="text-muted small mb-0">Welcome back, <span class="text-primary fw-semibold">@Session.FullName</span> (@Session.Role)</p>
+            }
+            else
+            {
+                <p class="text-muted small mb-0">Browse top-rated professionals in your vicinity instantly.</p>
+            }
+        </div>
+
+        <div>
+            @if (Session.IsLoggedIn && Session.Role == "Customer")
+            {
+                @if (!showConfirmDelete)
+                {
+                    <button class="btn btn-danger fw-bold shadow-sm rounded-pill btn-sm px-3" @onclick="() => showConfirmDelete = true">
+                        <i class="bi bi-person-x-fill me-1"></i> Delete My Profile
+                    </button>
+                }
+                else
+                {
+                    <div class="d-flex align-items-center gap-2 bg-light border border-danger rounded p-2 text-nowrap">
+                        <span class="text-danger small fw-bold">Are you absolutely sure?</span>
+                        <button class="btn btn-danger btn-sm py-0 px-2 fw-bold" @onclick="ExecuteCustomerPurge">Yes</button>
+                        <button class="btn btn-secondary btn-sm py-0 px-2" @onclick="() => showConfirmDelete = false">No</button>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    @* --- MARKETPLACE LISTINGS GRID --- *@
+    <div class="row">
+        @if (services == null)
+        {
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted mt-2">Synchronizing database listings...</p>
+            </div>
+        }
+        else if (!services.Any())
+        {
+            <div class="col-12 text-center py-5">
+                <div class="alert alert-light border rounded shadow-sm">
+                    <i class="bi bi-folder-x display-4 text-muted d-block mb-2"></i>
+                    <h5>No Services Found</h5>
+                    <p class="text-muted mb-0">There are currently no active marketplace advertisements listed on the platform.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            @foreach (var service in services)
+            {
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 shadow-sm border-0 rounded-3 overflow-hidden">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="card-title fw-bold text-dark mb-0">@service.Title</h5>
+                                <span class="badge bg-success-subtle text-success border border-success border-opacity-20 px-2 py-1 rounded">
+                                    Rs. @service.Price
+                                </span>
+                            </div>
+                            <span class="badge bg-secondary mb-3">@(service.Category?.Name ?? "General Listing")</span>
+                            <p class="card-text text-muted small">@service.Description</p>
+
+                            <hr class="text-black-50 my-3" />
+
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bg-light rounded-circle d-flex align-items-center justify-content-center border" style="width: 36px; height: 36px;">
+                                    <i class="bi bi-person text-secondary"></i>
+                                </div>
+                                <div>
+                                    <p class="mb-0 small fw-bold text-dark">@(service.Provider?.User?.FullName ?? "Independent Provider")</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-light border-0 p-3 d-flex justify-content-between align-items-center">
+                            <button class="btn btn-outline-secondary btn-sm px-3 rounded-pill">View Details</button>
+                            @if (Session.IsLoggedIn && Session.Role == "Customer")
+                            {
+                                <button class="btn btn-primary btn-sm px-4 rounded-pill fw-bold shadow-sm" @onclick="() => HandleServiceBooking(service)">
+                                    Book Now
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private List<Service>? services;
+    private bool showConfirmDelete = false;
+    private bool showSuccessBanner = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.OnSessionChanged += ResyncInterface;
+        await LoadMarketplaceData();
+    }
+
+    private async Task LoadMarketplaceData()
+    {
+        try
+        {
+            services = await DataService.GetAllServicesAsync();
+        }
+        catch
+        {
+            services = new List<Service>();
+        }
+    }
+
+    private void ResyncInterface() => InvokeAsync(StateHasChanged);
+
+    // FIXED METHOD: Removed the missing schema assignment column 'ProviderId'
+    private async Task HandleServiceBooking(Service targetService)
+    {
+        var incomingBooking = new Booking
+        {
+            CustomerId = Session.UserId,
+            ServiceId = targetService.ServiceId,
+            BookingDate = DateTime.Now,
+            Status = "Pending"
+        };
+
+        bool transactionSuccess = await DataService.CreateBookingAsync(incomingBooking);
+
+        if (transactionSuccess)
+        {
+            showSuccessBanner = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExecuteCustomerPurge()
+    {
+        var success = await DataService.DeleteCustomerAccountAsync(Session.UserId);
+        if (success)
+        {
+            Session.Logout();
+            Nav.NavigateTo("/explore", forceLoad: true);
+        }
+    }
+
+    public void Dispose() => Session.OnSessionChanged -= ResyncInterface;
+}

@@ -1,0 +1,185 @@
+﻿@page "/join"
+@using LocalServicesPlatform.Models
+@using LocalServicesPlatform.Services
+@inject PlatformService DataService
+@inject UserSession Session
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
+
+                @* --- Header Context Toggle --- *@
+                <div class="py-4 text-white text-center @(isLoginMode ? "bg-primary" : "bg-success")">
+                    <h3 class="mb-1 fw-bold">@(isLoginMode ? "Welcome Back" : "Create Account")</h3>
+                    <p class="mb-0 opacity-75 small">
+                        @(isLoginMode ? "Enter your credentials to access your workspace" : "Join our ecosystem of local professionals")
+                    </p>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (!string.IsNullOrEmpty(statusMessage))
+                    {
+                        <div class="alert @statusClass text-center py-2 small shadow-sm">
+                            @statusMessage
+                        </div>
+                    }
+
+                    @if (!isLoginMode)
+                    {
+                        @* --- SIGNUP VIEW MODE --- *@
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary">Full Name</label>
+                            <input @bind="registerUser.FullName" type="text" class="form-control form-control-lg fs-6" placeholder="John Doe" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary">Email Address</label>
+                            <input @bind="registerUser.Email" type="email" class="form-control form-control-lg fs-6" placeholder="name@example.com" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary">Phone Number</label>
+                            <input @bind="registerUser.PhoneNumber" type="tel" class="form-control form-control-lg fs-6" placeholder="03XXXXXXXXX" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary">City Location</label>
+                            <select @bind="registerUser.City" class="form-select form-select-lg fs-6">
+                                <option value="">-- Select City --</option>
+                                <option value="Islamabad">Islamabad</option>
+                                <option value="Rawalpindi">Rawalpindi</option>
+                                <option value="Lahore">Lahore</option>
+                                <option value="Karachi">Karachi</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary">Create Password</label>
+                            <input @bind="registerUser.PasswordHash" type="password" class="form-control form-control-lg fs-6" placeholder="••••••••" />
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold text-secondary">Account Assignment Type</label>
+                            <select @bind="registerUser.Role" class="form-select form-select-lg fs-6 text-primary fw-bold">
+                                <option value="Customer">I want to hire services (Customer)</option>
+                                <option value="Provider">I want to offer services (Provider)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-success w-100 py-2.5 fw-bold shadow-sm rounded-3" @onclick="HandleRegister">
+                            Register & Get Started
+                        </button>
+
+                        <div class="text-center mt-4 border-top pt-3">
+                            <p class="mb-1 text-muted small">Already have an operational profile?</p>
+                            <button class="btn btn-outline-primary btn-sm px-4 fw-bold" @onclick="ToggleAuthMode">
+                                Sign In Instead
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        @* --- LOGIN VIEW MODE --- *@
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary">Email Address</label>
+                            <input @bind="loginEmail" type="email" class="form-control form-control-lg fs-6" placeholder="name@example.com" />
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold text-secondary">Password</label>
+                            <input @bind="loginPassword" type="password" class="form-control form-control-lg fs-6" placeholder="••••••••" />
+                        </div>
+                        <button class="btn btn-primary w-100 py-2.5 fw-bold shadow-sm rounded-3" @onclick="HandleLogin">
+                            Secure Log In
+                        </button>
+
+                        <div class="text-center mt-4 border-top pt-3">
+                            <p class="mb-1 text-muted small">New to our platform?</p>
+                            <button class="btn btn-outline-success btn-sm px-4 fw-bold" @onclick="ToggleAuthMode">
+                                Create an Account
+                            </button>
+                        </div>
+                    }
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isLoginMode = false;
+    private string statusMessage = "";
+    private string statusClass = "alert-danger";
+
+    private User registerUser = new User { Role = "Customer", City = "" };
+    private string loginEmail = "";
+    private string loginPassword = "";
+
+    private void ToggleAuthMode()
+    {
+        isLoginMode = !isLoginMode;
+        statusMessage = "";
+    }
+
+    private async Task HandleRegister()
+    {
+        if (string.IsNullOrWhiteSpace(registerUser.FullName) || string.IsNullOrWhiteSpace(registerUser.Email) ||
+            string.IsNullOrWhiteSpace(registerUser.PasswordHash) || string.IsNullOrWhiteSpace(registerUser.PhoneNumber) ||
+            string.IsNullOrWhiteSpace(registerUser.City))
+        {
+            statusMessage = "All registration input elements must be fully complete.";
+            statusClass = "alert-warning";
+            return;
+        }
+
+        var result = await DataService.RegisterUserAsync(registerUser);
+        if (result == "Success")
+        {
+            statusMessage = "Registration complete! Auto-switching to login...";
+            statusClass = "alert-success";
+            StateHasChanged();
+            await Task.Delay(1500);
+
+            loginEmail = registerUser.Email;
+            isLoginMode = true;
+            statusMessage = "Please verify your password to login.";
+            statusClass = "alert-info";
+        }
+        else
+        {
+            statusMessage = result == "EmailAlreadyExists" ? "This email is already in use." : "Database pipeline error.";
+            statusClass = "alert-danger";
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(loginEmail) || string.IsNullOrWhiteSpace(loginPassword))
+        {
+            statusMessage = "Please fulfill email and password fields.";
+            statusClass = "alert-warning";
+            return;
+        }
+
+        var user = await DataService.VerifyUserAsync(loginEmail, loginPassword);
+        if (user != null)
+        {
+            Session.Login(user.UserId, user.FullName, user.Email, user.Role);
+            statusMessage = "Access granted! Transporting to secure workspace...";
+            statusClass = "alert-success";
+            StateHasChanged();
+            await Task.Delay(1200);
+
+            if (user.Role == "Provider")
+            {
+                Nav.NavigateTo("/provider-dashboard");
+            }
+            else
+            {
+                Nav.NavigateTo("/explore");
+            }
+        }
+        else
+        {
+            statusMessage = "Invalid credentials profile validation check.";
+            statusClass = "alert-danger";
+        }
+    }
+}

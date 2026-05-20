@@ -1,0 +1,22 @@
+﻿@page "/test"
+
+@using LocalServicesPlatform.Models
+
+@inject LocalServicesDbContext db
+
+<h1>Users</h1>
+
+<p>Total Users: @db.Users.Count()</p>
+
+@foreach (var user in db.Users)
+{
+    <div class="card p-3 mb-3">
+
+        <h4>@user.FullName</h4>
+
+        <p>@user.Email</p>
+
+        <p>@user.Role</p>
+
+    </div>
+}

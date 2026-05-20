@@ -1,0 +1,226 @@
+﻿@page "/provider-dashboard"
+@rendermode InteractiveServer
+@using LocalServicesPlatform.Models
+@using LocalServicesPlatform.Services
+@inject PlatformService DataService
+@inject UserSession Session
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="container mt-4">
+    @if (!Session.IsLoggedIn || Session.Role != "Provider")
+    {
+        <div class="alert alert-danger shadow-sm">
+            <h4>Access Denied</h4>
+            <p>You must be signed in as a Service Provider to view this dashboard.</p>
+            <a href="login" class="btn btn-primary btn-sm">Go to Login</a>
+        </div>
+    }
+    else
+    {
+        <div class="row mb-4 align-items-center">
+            <div class="col">
+                <h2 class="fw-bold text-dark mb-0">Provider Control Center</h2>
+                <p class="text-muted">Welcome back, @Session.FullName. Manage your service listings and view incoming client orders below.</p>
+            </div>
+        </div>
+
+        <div class="row">
+            @* --- Left Side: Add New Service Form --- *@
+            <div class="col-md-5 mb-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-dark text-white py-3">
+                        <h5 class="mb-0"><i class="bi bi-plus-circle-fill me-2"></i>Create New Service Listing</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        @if (!string.IsNullOrEmpty(feedbackMessage))
+                        {
+                            <div class="alert @feedbackClass py-2 small shadow-sm">
+                                @feedbackMessage
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Service Title</label>
+                            <input @bind="newService.Title" class="form-control" placeholder="e.g., AC Repair & Maintenance" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Select Category</label>
+                            <select @bind="newService.CategoryId" class="form-select">
+                                <option value="0">-- Select Category --</option>
+                                @foreach (var cat in categories)
+                                {
+                                    <option value="@cat.CategoryId">@cat.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Price (Rs.)</label>
+                            <input @bind="newService.Price" type="number" class="form-control" placeholder="3000" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Description</label>
+                            <textarea @bind="newService.Description" class="form-control" rows="3" placeholder="Describe your service details..."></textarea>
+                        </div>
+
+                        <button class="btn btn-primary w-100 py-2 fw-bold" @onclick="SubmitService">
+                            Publish Service Listing
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            @* --- Right Side: Incoming Bookings Feed --- *@
+            <div class="col-md-7">
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-mailbox me-2"></i>Live Incoming Bookings Feed</h6>
+                        <span class="badge bg-white text-primary">Live Connections</span>
+                    </div>
+                    <div class="card-body p-3">
+                        @if (providerBookings == null)
+                        {
+                            <div class="text-center py-4 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                Syncing incoming dispatches...
+                            </div>
+                        }
+                        else if (!providerBookings.Any())
+                        {
+                            <div class="py-5 text-center text-muted">
+                                <i class="bi bi-folder-symlink h1 d-block mb-3 text-black-50"></i>
+                                <p class="mb-0">No active service dispatches are assigned to your user account profile yet.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle border-0 small">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Client Name</th>
+                                            <th>Requested Service</th>
+                                            <th>Date Initiated</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var book in providerBookings)
+                                        {
+                                            <tr>
+                                                @* FIXED LAYOUT: Added null-conditional checks to clear dereference warnings *@
+                                                <td class="fw-bold text-dark">@(book.Customer?.FullName ?? "Unknown Client")</td>
+                                                <td><span class="badge bg-secondary-subtle text-secondary border border-secondary border-opacity-20">@(book.Service?.Title ?? "Service Details")</span></td>
+                                                <td class="text-muted">@book.BookingDate.ToString("g")</td>
+                                                <td>
+                                                    <span class="badge bg-warning text-dark px-2 py-1 fw-bold rounded-pill">@(book.Status ?? "Pending")</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @* --- Secure Profile Deletion Panel --- *@
+                <div class="card shadow-sm border-0 rounded-3 bg-white border-top border-5 border-danger">
+                    <div class="card-body p-4">
+                        <h5 class="fw-bold text-danger mb-2"><i class="bi bi-shield-exclamation me-2"></i>Danger Zone</h5>
+                        <p class="text-muted mb-3 small">Deleting your profile will permanently drop your data records from the system databases.</p>
+
+                        @if (!showConfirmDelete)
+                        {
+                            <button class="btn btn-outline-danger fw-bold py-2 btn-sm px-4" @onclick="() => showConfirmDelete = true">
+                                <i class="bi bi-trash3-fill me-2"></i> Delete My Profile Account
+                            </button>
+                        }
+                        else
+                        {
+                            <div class="bg-light p-3 rounded border border-danger text-center">
+                                <p class="text-danger small fw-bold mb-2">Confirm permanent erasure? This action cannot be undone.</p>
+                                <div class="d-flex gap-2 justify-content-center">
+                                    <button class="btn btn-danger btn-sm px-4 fw-bold" @onclick="ConfirmAccountDeletion">Yes, Purge My Data</button>
+                                    <button class="btn btn-secondary btn-sm px-3" @onclick="() => showConfirmDelete = false">Cancel</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private Service newService = new Service();
+    private List<ServiceCategory> categories = new List<ServiceCategory>();
+    private List<Booking>? providerBookings;
+    private string feedbackMessage = "";
+    private string feedbackClass = "";
+    private bool showConfirmDelete = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.OnSessionChanged += OnSessionChangedHandler;
+        categories = await DataService.GetCategoriesAsync();
+        await LoadProviderIncomingOrders();
+    }
+
+    private async Task LoadProviderIncomingOrders()
+    {
+        if (Session.IsLoggedIn && Session.Role == "Provider")
+        {
+            providerBookings = await DataService.GetBookingsByProviderAsync(Session.UserId);
+        }
+    }
+
+    private void OnSessionChangedHandler() => InvokeAsync(StateHasChanged);
+
+    private async Task SubmitService()
+    {
+        if (string.IsNullOrWhiteSpace(newService.Title) || newService.CategoryId == 0 || newService.Price <= 0)
+        {
+            feedbackMessage = "Please fulfill all mandatory parameters accurately.";
+            feedbackClass = "alert-warning";
+            return;
+        }
+
+        var matchingProviderId = await DataService.GetProviderIdByUserIdAsync(Session.UserId);
+        if (matchingProviderId == null)
+        {
+            feedbackMessage = "Error: Tracing registered provider configuration failed.";
+            feedbackClass = "alert-danger";
+            return;
+        }
+
+        newService.ProviderId = matchingProviderId.Value;
+        newService.CreatedAt = DateTime.Now;
+
+        bool saveSuccess = await DataService.AddServiceAsync(newService);
+        if (saveSuccess)
+        {
+            feedbackMessage = "Service listing published successfully!";
+            feedbackClass = "alert-success";
+            newService = new Service();
+            await LoadProviderIncomingOrders();
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmAccountDeletion()
+    {
+        var success = await DataService.DeleteProviderAccountAsync(Session.UserId);
+        if (success)
+        {
+            Session.Logout();
+            Nav.NavigateTo("/explore", forceLoad: true);
+        }
+    }
+
+    public void Dispose() => Session.OnSessionChanged -= OnSessionChangedHandler;
+}

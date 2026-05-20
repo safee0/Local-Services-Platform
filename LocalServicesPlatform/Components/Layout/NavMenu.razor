@@ -1,0 +1,104 @@
+﻿@inject LocalServicesPlatform.Services.UserSession Session
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold" href="">Local Services</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+
+        @* --- ALWAYS VISIBLE --- *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill" aria-hidden="true"></span> Welcome Home
+            </NavLink>
+        </div>
+
+        @if (!Session.IsLoggedIn)
+        {
+            @* --- OUTSIDE APP PORTAL (LOGGED OUT) --- *@
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="join">
+                    <span class="bi bi-shield-lock-fill" aria-hidden="true"></span> Get Started / Login
+                </NavLink>
+            </div>
+        }
+        else
+        {
+            @* --- INSIDE APP PORTAL (LOGGED IN USER CONTEXT) --- *@
+            <div class="nav-item px-3 text-white-50 mt-3 small bg-dark mx-2 py-2 rounded border border-secondary">
+                <i class="bi bi-person-circle text-info"></i> @Session.FullName <br />
+                <span class="badge bg-secondary mt-1">@Session.Role</span>
+            </div>
+
+            @* Shared Entry point to the Marketplace Feed *@
+            <div class="nav-item px-3 mt-2">
+                <NavLink class="nav-link" href="explore">
+                    <span class="bi bi-shop-window" aria-hidden="true"></span> Explore Marketplace
+                </NavLink>
+            </div>
+
+            @if (Session.Role == "Provider")
+            {
+                @* --- PROVIDER WORKSPACE OPTIONS --- *@
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="provider-dashboard">
+                        <span class="bi bi-speedometer2" aria-hidden="true"></span> Dashboard Ads
+                    </NavLink>
+                </div>
+            }
+            else
+            {
+                @* --- CUSTOMER WORKSPACE OPTIONS --- *@
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="my-bookings">
+                        <span class="bi bi-calendar-check" aria-hidden="true"></span> My Bookings
+                    </NavLink>
+                </div>
+            }
+
+            @* --- GLOBAL LOGOUT OPERATIONS --- *@
+            <div class="nav-item px-3 mt-4">
+                <button class="nav-link btn btn-link text-danger border-0 w-100 text-start bg-transparent" @onclick="HandleLogout">
+                    <span class="bi bi-power text-danger" aria-hidden="true"></span> Exit Portal
+                </button>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link text-danger fw-bold" href="delete-account">
+                    <i class="bi bi-trash3-fill me-2"></i> Account Deletion
+                </NavLink>
+            </div>
+        }
+    </nav>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Tells Blazor to sync and re-render sidebar instantly when user triggers actions
+        Session.OnSessionChanged += OnSessionChangedHandler;
+    }
+
+    private void OnSessionChangedHandler()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleLogout()
+    {
+        Session.Logout();
+        Nav.NavigateTo("/", forceLoad: true); // Gracefully clean memory states back to Welcome screen
+    }
+
+    public void Dispose()
+    {
+        // Prevent background memory leaking on continuous operations
+        Session.OnSessionChanged -= OnSessionChangedHandler;
+    }
+}
